@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aadhaar Card PDF Cropper & Print Generator</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Cropper.js CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+    
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    
+    <!-- Cropper.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+    
+    <!-- jsPDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        .cropper-view-box { outline: 2px solid #4F46E5; outline-color: rgba(79, 70, 229, 0.75); }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans min-h-screen">
+
+    <!-- Header -->
+    <header class="bg-indigo-600 text-white p-4 shadow-md">
+        <div class="max-w-4xl mx-auto flex items-center justify-between">
+            <h1 class="text-xl font-bold">Aadhaar PVC & Print Generator</h1>
+            <span class="text-xs bg-indigo-800 px-3 py-1 rounded-full flex items-center gap-1">
+                🔒 100% Secure. Runs in your browser.
+            </span>
+        </div>
+    </header>
+
+    <main class="max-w-4xl mx-auto p-4 space-y-6 pb-20">
+        
+        <!-- Step 1: Upload -->
+        <section id="uploadSection" class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+            <h2 class="text-lg font-semibold mb-4">1. Upload Password Protected PDF</h2>
+            <div class="flex items-center justify-center w-full">
+                <label for="pdfUpload" class="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition">
+                    <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                        <svg class="w-8 h-8 mb-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                        <p class="mb-2 text-sm text-gray-500"><span class="font-semibold">Click to upload</span> or drag and drop</p>
+                        <p class="text-xs text-gray-500">e-Aadhaar PDF only</p>
+                    </div>
+                    <input id="pdfUpload" type="file" accept=".pdf" class="hidden" />
+                </label>
+            </div>
+            
+            <!-- Password Input -->
+            <div id="passwordSection" class="hidden mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <label class="block text-sm font-medium text-yellow-800 mb-1">PDF Password Required</label>
+                <div class="flex gap-2">
+                    <input type="password" id="pdfPassword" class="flex-1 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Enter PDF Password (e.g. first 4 letters of name + YYYY)">
+                    <button id="decryptBtn" class="bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-700 transition">Decrypt</button>
+                </div>
+                <p class="text-xs text-yellow-700 mt-2">Aadhaar PDF password is usually the first 4 letters of your name in CAPS + birth year (e.g., RAMU1990).</p>
+            </div>
+            <p id="errorMessage" class="text-red-500 text-sm mt-2 hidden"></p>
+        </section>
+
+        <!-- Step 2: Crop -->
+        <section id="cropSection" class="hidden bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-semibold">2. Crop Front & Back</h2>
+                <span class="text-sm text-gray-500">Aspect ratio locked to 8.8cm x 5.8cm</span>
+            </div>
+            
+            <div class="bg-gray-100 rounded-lg overflow-hidden mb-4 flex justify-center p-2" style="max-height: 500px;">
+                <img id="imageToCrop" src="" alt="PDF Page" class="max-w-full block">
+            </div>
+
+            <div class="flex flex-wrap gap-4 mb-6">
+                <button id="cropFrontBtn" class="flex-1 bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 transition flex items-center justify-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    Extract Front Side
+                </button>
+                <button id="cropBackBtn" class="flex-1 bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 transition flex items-center justify-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    Extract Back Side
+                </button>
+            </div>
+
+            <!-- Previews -->
+            <div class="grid grid-cols-2 gap-4">
+                <div class="border rounded p-2 bg-gray-50 text-center">
+                    <p class="text-xs font-semibold mb-2 text-gray-500">FRONT PREVIEW</p>
+                    <img id="frontPreview" src="" class="w-full border shadow-sm hidden" style="aspect-ratio: 8.8/5.8; object-fit: cover;">
+                    <div id="frontPlaceholder" class="flex items-center justify-center bg-gray-200 text-gray-400 text-xs rounded" style="aspect-ratio: 8.8/5.8;">Not extracted</div>
+                </div>
+                <div class="border rounded p-2 bg-gray-50 text-center">
+                    <p class="text-xs font-semibold mb-2 text-gray-500">BACK PREVIEW</p>
+                    <img id="backPreview" src="" class="w-full border shadow-sm hidden" style="aspect-ratio: 8.8/5.8; object-fit: cover;">
+                    <div id="backPlaceholder" class="flex items-center justify-center bg-gray-200 text-gray-400 text-xs rounded" style="aspect-ratio: 8.8/5.8;">Not extracted</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Step 3: Generate -->
+        <section id="actionSection" class="hidden bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+            <h2 class="text-lg font-semibold mb-4">3. Generate & Print</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <!-- A4 Print -->
+                <div class="border rounded-lg p-4 bg-gray-50">
+                    <h3 class="font-medium text-gray-800 mb-2">A4 Paper Print</h3>
+                    <p class="text-xs text-gray-500 mb-4">Size: 17.8cm x 5.8cm (Side-by-side). Top margin: 0.5cm.</p>
+                    <button id="downloadA4Btn" class="w-full bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">
+                        Download A4 PDF
+                    </button>
+                </div>
+                
+                <!-- 4x6 Print -->
+                <div class="border rounded-lg p-4 bg-gray-50">
+                    <h3 class="font-medium text-gray-800 mb-2">4x6 Photo Paper</h3>
+                    <p class="text-xs text-gray-500 mb-4">Size: 8.8cm x 5.8cm. Gap: 0.1cm. Top: 0.5cm. Back rotated 180°.</p>
+                    <button id="download4x6Btn" class="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
+                        Download 4x6 PDF
+                    </button>
+                </div>
+            </div>
+
+            <!-- PVC Cards -->
+            <div class="border-t pt-4">
+                <h3 class="font-medium text-gray-800 mb-4">PVC Card Downloads (High Res)</h3>
+                <div class="flex gap-4">
+                    <button id="downloadPvcFrontBtn" class="flex-1 bg-gray-800 text-white px-4 py-2 rounded hover:bg-gray-900 transition flex items-center justify-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        Download Front (JPG)
+                    </button>
+                    <button id="downloadPvcBackBtn" class="flex-1 bg-gray-800 text-white px-4 py-2 rounded hover:bg-gray-900 transition flex items-center justify-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        Download Back (JPG)
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // Set PDF.js worker path
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // State variables
+        let currentPdfFile = null;
+        let pdfDocument = null;
+        let cropper = null;
+        let frontBase64 = null;
+        let backBase64 = null;
+
+        // UI Elements
+        const pdfUpload = document.getElementById('pdfUpload');
+        const passwordSection = document.getElementById('passwordSection');
+        const pdfPassword = document.getElementById('pdfPassword');
+        const decryptBtn = document.getElementById('decryptBtn');
+        const errorMessage = document.getElementById('errorMessage');
+        const cropSection = document.getElementById('cropSection');
+        const imageToCrop = document.getElementById('imageToCrop');
+        const actionSection = document.getElementById('actionSection');
+        
+        const frontPreview = document.getElementById('frontPreview');
+        const frontPlaceholder = document.getElementById('frontPlaceholder');
+        const backPreview = document.getElementById('backPreview');
+        const backPlaceholder = document.getElementById('backPlaceholder');
+
+        // Handle File Upload
+        pdfUpload.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            currentPdfFile = file;
+            errorMessage.classList.add('hidden');
+            await loadPDF(null);
+        });
+
+        // Handle Decrypt Button
+        decryptBtn.addEventListener('click', async () => {
+            const pwd = pdfPassword.value;
+            if (!pwd) return alert("Please enter the password");
+            errorMessage.classList.add('hidden');
+            await loadPDF(pwd);
+        });
+
+        // Load PDF Function
+        async function loadPDF(password) {
+            try {
+                const arrayBuffer = await currentPdfFile.arrayBuffer();
+                const loadingTask = pdfjsLib.getDocument({
+                    data: arrayBuffer,
+                    password: password
+                });
+
+                pdfDocument = await loadingTask.promise;
+                
+                // Hide password if successful
+                passwordSection.classList.add('hidden');
+                
+                // Render Page 1
+                await renderPage(pdfDocument, 1);
+
+            } catch (error) {
+                if (error.name === 'PasswordException') {
+                    passwordSection.classList.remove('hidden');
+                    errorMessage.textContent = "Password required or incorrect. Please try again.";
+                    errorMessage.classList.remove('hidden');
+                } else {
+                    console.error(error);
+                    errorMessage.textContent = "Error loading PDF. Ensure it is a valid file.";
+                    errorMessage.classList.remove('hidden');
+                }
+            }
+        }
+
+        // Render PDF Page to Image
+        async function renderPage(pdf, pageNum) {
+            const page = await pdf.getPage(pageNum);
+            
+            // Render at high scale for print quality (approx 300 DPI)
+            const viewport = page.getViewport({ scale: 4.0 }); 
+            
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+
+            await page.render({ canvasContext: context, viewport: viewport }).promise;
+            
+            imageToCrop.src = canvas.toDataURL('image/jpeg');
+            
+            // Show Crop Section
+            cropSection.classList.remove('hidden');
+            
+            // Initialize Cropper
+            if (cropper) cropper.destroy();
+            
+            imageToCrop.onload = () => {
+                cropper = new Cropper(imageToCrop, {
+                    aspectRatio: 8.8 / 5.8, // Lock aspect ratio
+                    viewMode: 1,
+                    autoCropArea: 0.8,
+                    background: false
+                });
+            };
+        }
+
+        // Handle Extracting Crops
+        function extractCrop() {
+            if (!cropper) return null;
+            const canvas = cropper.getCroppedCanvas({
+                width: 1000, // High resolution for PVC printing
+                height: 659  // 1000 * (5.8/8.8) = 659
+            });
+            return canvas.toDataURL('image/jpeg', 0.95);
+        }
+
+        document.getElementById('cropFrontBtn').addEventListener('click', () => {
+            const data = extractCrop();
+            if (data) {
+                frontBase64 = data;
+                frontPreview.src = data;
+                frontPreview.classList.remove('hidden');
+                frontPlaceholder.classList.add('hidden');
+                checkActions();
+            }
+        });
+
+        document.getElementById('cropBackBtn').addEventListener('click', () => {
+            const data = extractCrop();
+            if (data) {
+                backBase64 = data;
+                backPreview.src = data;
+                backPreview.classList.remove('hidden');
+                backPlaceholder.classList.add('hidden');
+                checkActions();
+            }
+        });
+
+        function checkActions() {
+            if (frontBase64 && backBase64) {
+                actionSection.classList.remove('hidden');
+                actionSection.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+
+        // --- GENERATE PDF LOGIC ---
+
+        // 1. Generate A4 PDF (17.8cm x 5.8cm)
+        document.getElementById('downloadA4Btn').addEventListener('click', () => {
+            if (!frontBase64 || !backBase64) return alert("Please extract both sides first.");
+            
+            const { jsPDF } = window.jspdf;
+            // A4 is 21cm x 29.7cm
+            const doc = new jsPDF({ orientation: 'p', unit: 'cm', format: 'a4' });
+            
+            // Width: 8.8 + 8.8 = 17.6cm. Gap: 0.2cm. Total: 17.8cm
+            // Margin: (21 - 17.8) / 2 = 1.6cm
+            const startX = 1.6;
+            const startY = 0.5; // Requested 0.5cm top margin
+            
+            doc.addImage(frontBase64, 'JPEG', startX, startY, 8.8, 5.8);
+            // Back placed next to Front with 0.2cm gap
+            doc.addImage(backBase64, 'JPEG', startX + 8.8 + 0.2, startY, 8.8, 5.8);
+            
+            doc.save('Aadhaar_A4_Print.pdf');
+        });
+
+        // 2. Generate 4x6 PDF (10.16cm x 15.24cm)
+        document.getElementById('download4x6Btn').addEventListener('click', () => {
+            if (!frontBase64 || !backBase64) return alert("Please extract both sides first.");
+            
+            const { jsPDF } = window.jspdf;
+            // 4x6 inches in cm is 10.16 x 15.24
+            const doc = new jsPDF({ orientation: 'p', unit: 'cm', format: [10.16, 15.24] });
+            
+            const cardW = 8.8;
+            const cardH = 5.8;
+            const startX = (10.16 - cardW) / 2; // Center horizontally (0.68cm)
+            const startY = 0.5; // Requested top margin
+            const gap = 0.1; // Requested folding space
+
+            // Add Front
+            doc.addImage(frontBase64, 'JPEG', startX, startY, cardW, cardH);
+            
+            // Add Back (Rotated 180 degrees)
+            // The Y position is topMargin + height + gap = 0.5 + 5.8 + 0.1 = 6.4
+            const backY = startY + cardH + gap;
+            
+            // When rotating 180 in jsPDF, the x/y coordinates act as the bottom-right corner
+            // So we add width and height to the coordinates
+            doc.addImage(backBase64, 'JPEG', startX + cardW, backY + cardH, cardW, cardH, undefined, 'NONE', 180);
+            
+            doc.save('Aadhaar_4x6_Print.pdf');
+        });
+
+        // 3. Download PVC Cards
+        document.getElementById('downloadPvcFrontBtn').addEventListener('click', () => {
+            if (!frontBase64) return;
+            const link = document.createElement('a');
+            link.download = 'Aadhaar_Front_PVC.jpg';
+            link.href = frontBase64;
+            link.click();
+        });
+
+        document.getElementById('downloadPvcBackBtn').addEventListener('click', () => {
+            if (!backBase64) return;
+            const link = document.createElement('a');
+            link.download = 'Aadhaar_Back_PVC.jpg';
+            link.href = backBase64;
+            link.click();
+        });
+
+    </script>
+</body>
+</html>
