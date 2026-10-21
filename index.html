@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aadhaar Card PDF Auto-Cropper & Print Generator</title>
+    <title>Aadhaar Card Smart Cropper & Print Generator</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -67,7 +67,7 @@
             <!-- Loading Spinner -->
             <div id="loadingSection" class="hidden mt-4 flex flex-col items-center justify-center text-indigo-600">
                 <div class="loader mb-2"></div>
-                <p class="text-sm">Processing PDF and extracting cards...</p>
+                <p class="text-sm">Analyzing PDF layout and extracting cards...</p>
             </div>
         </section>
 
@@ -191,44 +191,118 @@
 
         async function autoCropPage(pdf) {
             const page = await pdf.getPage(1);
-            // Render at high scale for print quality (approx 300 DPI)
-            const viewport = page.getViewport({ scale: 4.0 }); 
             
+            // 1. Get Text Content and Viewport (Scale 1.0 for coordinate mapping)
+            const textContent = await page.getTextContent();
+            const viewportScale1 = page.getViewport({ scale: 1.0 });
+            const pageWidth = viewportScale1.width;
+            const pageHeight = viewportScale1.height;
+
+            // 2. Calculate Text Bounding Boxes for Left (Front) and Right (Back)
+            let leftBounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+            let rightBounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+
+            textContent.items.forEach(item => {
+                const x = item.transform[4];
+                const y = item.transform[5]; // PDF Y starts from bottom
+                const w = item.width;
+                const h = item.height;
+                
+                // Only look at text in the top half of the page (Y > 50% of page height)
+                // e-Aadhaar cards are always printed at the top.
+                if (y > pageHeight * 0.5) {
+                    if (x < pageWidth * 0.5) {
+                        // Left side (Front)
+                        leftBounds.minX = Math.min(leftBounds.minX, x);
+                        leftBounds.maxX = Math.max(leftBounds.maxX, x + w);
+                        leftBounds.minY = Math.min(leftBounds.minY, y);
+                        leftBounds.maxY = Math.max(leftBounds.maxY, y + h);
+                    } else {
+                        // Right side (Back)
+                        rightBounds.minX = Math.min(rightBounds.minX, x);
+                        rightBounds.maxX = Math.max(rightBounds.maxX, x + w);
+                        rightBounds.minY = Math.min(rightBounds.minY, y);
+                        rightBounds.maxY = Math.max(rightBounds.maxY, y + h);
+                    }
+                }
+            });
+
+            // 3. Calculate Crop Boxes based on Aspect Ratio (8.8 / 5.8 = 1.517)
+            const targetRatio = 8.8 / 5.8;
+
+            const calculateCropBox = (bounds) => {
+                if (bounds.minX === Infinity) return null;
+                
+                const w = bounds.maxX - bounds.minX;
+                const h = bounds.maxY - bounds.minY;
+                const centerX = bounds.minX + w / 2;
+                // Note: PDF Y coordinates are inverted relative to Canvas Y
+                const centerY = bounds.minY + h / 2; 
+                
+                let cropW, cropH;
+                if (w / h < targetRatio) {
+                    cropH = h;
+                    cropW = h * targetRatio;
+                } else {
+                    cropW = w;
+                    cropH = w / targetRatio;
+                }
+                
+                // Add 6% padding to ensure the card border is captured
+                const padW = cropW * 0.06;
+                const padH = cropH * 0.06;
+                
+                return {
+                    x: centerX - (cropW + padW) / 2,
+                    y: centerY - (cropH + padH) / 2,
+                    w: cropW + padW,
+                    h: cropH + padH
+                };
+            };
+
+            const frontBox = calculateCropBox(leftBounds);
+            const backBox = calculateCropBox(rightBounds);
+
+            // 4. Render PDF to Canvas at High Resolution (Scale 4.0 for 300 DPI)
+            const renderScale = 4.0;
+            const viewport = page.getViewport({ scale: renderScale });
             const canvas = document.createElement('canvas');
             const context = canvas.getContext('2d');
             canvas.height = viewport.height;
             canvas.width = viewport.width;
 
             await page.render({ canvasContext: context, viewport: viewport }).promise;
-            
-            // --- AUTO CROP LOGIC ---
-            // These percentages are mapped to standard e-Aadhaar layouts
-            const w = canvas.width;
-            const h = canvas.height;
 
-            const cropConfig = {
-                // x, y, width, height as percentages of the page
-                front: { x: 0.043, y: 0.052, w: 0.45, h: 0.275 },
-                back:  { x: 0.505, y: 0.052, w: 0.45, h: 0.275 }
-            };
-
-            const extractRegion = (config) => {
+            // 5. Extract the Crops
+            const extractRegion = (box) => {
+                if (!box) return null;
+                
                 const c = document.createElement('canvas');
-                c.width = 1000; // High resolution
+                c.width = 1000; // High resolution for PVC
                 c.height = 659; // Exact 8.8 / 5.8 ratio
                 const ctx = c.getContext('2d');
                 
-                const sx = w * config.x;
-                const sy = h * config.y;
-                const sw = w * config.w;
-                const sh = h * config.h;
+                // Map PDF coordinates to Canvas coordinates (multiply by scale)
+                const sx = box.x * renderScale;
+                const sw = box.w * renderScale;
+                
+                // PDF Y is from bottom, Canvas Y is from top. 
+                // So we flip the Y coordinate.
+                const sy = (pageHeight - box.y - box.h) * renderScale;
+                const sh = box.h * renderScale;
 
+                // Draw the cropped area, scaling it up to 1000x659
                 ctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, c.width, c.height);
                 return c.toDataURL('image/jpeg', 0.95);
             };
 
-            frontBase64 = extractRegion(cropConfig.front);
-            backBase64 = extractRegion(cropConfig.back);
+            frontBase64 = extractRegion(frontBox);
+            backBase64 = extractRegion(backBox);
+
+            // Fallback if text extraction fails (e.g., image-only PDF)
+            if (!frontBase64 || !backBase64) {
+                throw new Error("Could not detect text coordinates in PDF. Please ensure it's a standard e-Aadhaar.");
+            }
 
             // Show results
             document.getElementById('frontPreview').src = frontBase64;
